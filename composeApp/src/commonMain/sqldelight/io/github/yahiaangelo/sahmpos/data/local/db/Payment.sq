@@ -1,0 +1,19 @@
+CREATE TABLE IF NOT EXISTS payment (
+    id TEXT NOT NULL PRIMARY KEY,
+    order_id TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    method TEXT NOT NULL,
+    status TEXT NOT NULL,
+    transaction_ref TEXT,
+    processed_at INTEGER NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_order ON payment(order_id);
+
+insert:
+INSERT INTO payment(id, order_id, amount_cents, method, status, transaction_ref, processed_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+selectByOrder:
+SELECT * FROM payment WHERE order_id = ?;
