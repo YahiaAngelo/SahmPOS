@@ -4,5 +4,7 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Sahm POS uses the camera to scan barcodes and QR codes.</string>
 </dict>
 </plist>

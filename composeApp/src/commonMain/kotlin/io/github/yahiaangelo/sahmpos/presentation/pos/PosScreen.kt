@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Restaurant
@@ -67,14 +68,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import io.github.yahiaangelo.sahmpos.domain.hardware.PaymentEvent
 import io.github.yahiaangelo.sahmpos.domain.model.PaymentMethod
 import io.github.yahiaangelo.sahmpos.domain.model.Product
 import io.github.yahiaangelo.sahmpos.domain.model.Receipt
+import io.github.yahiaangelo.sahmpos.presentation.hardware.CameraQrScanner
+import io.github.yahiaangelo.sahmpos.presentation.hardware.rememberReceiptPrintAction
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -841,10 +847,21 @@ private fun PaymentDialog(event: PaymentEvent) {
 
 @Composable
 private fun ReceiptDialog(receipt: Receipt, onDismiss: () -> Unit) {
+    val print = rememberReceiptPrintAction()
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             Button(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) { Text("Done") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { print(receipt.rendered, "Receipt ${receipt.order.id}") },
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Filled.Print, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Print")
+            }
         },
         icon = {
             Icon(
@@ -873,41 +890,57 @@ private fun ReceiptDialog(receipt: Receipt, onDismiss: () -> Unit) {
 
 @Composable
 private fun ScanDialog(onDismiss: () -> Unit, onScan: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
+    var handled by remember { mutableStateOf(false) }
+    Dialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                Icons.Filled.QrCodeScanner,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+        ) {
+            CameraQrScanner(
+                modifier = Modifier.fillMaxSize(),
+                onScanned = { code ->
+                    if (!handled) {
+                        handled = true
+                        onScan(code)
+                    }
+                },
             )
-        },
-        title = { Text("Scan barcode") },
-        text = {
-            Column {
-                Text(
-                    "Enter or paste a barcode (try 1000000001 through 1000000008)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it.filter { ch -> ch.isDigit() } },
-                    singleLine = true,
-                    label = { Text("Barcode") },
-                    shape = RoundedCornerShape(12.dp),
-                )
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(top = 48.dp, start = 16.dp, end = 16.dp),
+                color = Color.Black.copy(alpha = 0.55f),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.QrCodeScanner,
+                        contentDescription = null,
+                        tint = Color.White,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Point the camera at a barcode or QR code",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                        )
+                    }
+                }
             }
-        },
-        confirmButton = {
-            Button(
-                enabled = text.isNotBlank(),
-                onClick = { onScan(text) },
-                shape = RoundedCornerShape(12.dp),
-            ) { Text("Scan") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+        }
+    }
 }
