@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,18 +91,22 @@ actual fun CameraQrScanner(
                 .build()
         )
     }
-    var emitted by remember { mutableStateOf(false) }
+    val emittedRef = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val providerRef = remember { java.util.concurrent.atomic.AtomicReference<ProcessCameraProvider?>(null) }
+    val onScannedLatest by rememberUpdatedState(onScanned)
 
     DisposableEffect(Unit) {
         onDispose {
-            analysisExecutor.shutdown()
+            providerRef.getAndSet(null)?.unbindAll()
             mlScanner.close()
+            analysisExecutor.shutdown()
         }
     }
 
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
+            val mainExecutor = ContextCompat.getMainExecutor(ctx)
             val previewView = PreviewView(ctx).apply {
                 scaleType = PreviewView.ScaleType.FILL_CENTER
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
@@ -109,6 +114,7 @@ actual fun CameraQrScanner(
             val providerFuture = ProcessCameraProvider.getInstance(ctx)
             providerFuture.addListener({
                 val provider = providerFuture.get() ?: return@addListener
+                providerRef.set(provider)
                 val preview = Preview.Builder().build().also {
                     it.surfaceProvider = previewView.surfaceProvider
                 }
@@ -117,7 +123,7 @@ actual fun CameraQrScanner(
                     .build()
                 analysis.setAnalyzer(analysisExecutor) { proxy ->
                     val media = proxy.image
-                    if (media == null || emitted) {
+                    if (media == null || emittedRef.get()) {
                         proxy.close()
                         return@setAnalyzer
                     }
@@ -125,9 +131,11 @@ actual fun CameraQrScanner(
                     mlScanner.process(input)
                         .addOnSuccessListener { codes ->
                             codes.firstNotNullOfOrNull { it.rawValue }?.let { value ->
-                                if (!emitted) {
-                                    emitted = true
-                                    onScanned(value)
+                                if (emittedRef.compareAndSet(false, true)) {
+                                    mainExecutor.execute {
+                                        providerRef.getAndSet(null)?.unbindAll()
+                                        onScannedLatest(value)
+                                    }
                                 }
                             }
                         }
